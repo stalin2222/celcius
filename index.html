@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="es">
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -11,9 +11,12 @@
 
     <style>
       #resultado {
-        font-weight:  bold;
-        font-size:  1.2rem;
+        font-weight: bold;
+        font-size: 1.2rem;
         text-align: center;
+      }
+      .form-range {
+        cursor: pointer;
       }
     </style>
 
@@ -25,8 +28,8 @@
         <img class="d-block mx-auto mb-2" src="LogotipoV2-Simple.png" alt="" width="80" height="80">
         <h1 class="display-5 fw-bold">Celsius a Fahrenheit</h1>
         <div class="col-lg-6 mx-auto">
-          <p class="lead mb-0">Conversi&oacute;n de grados celsius a fahrenheit utilizando Tensorflow.js</p>
-          <p class="lead mb-4">ING GERARDO GUTIERREZ </p>
+          <p class="lead mb-0">Conversión de grados celsius a fahrenheit utilizando Tensorflow.js</p>
+          <p class="lead mb-4">ING GERARDO GUTIERREZ</p>
         </div>
       </div>
 
@@ -37,15 +40,16 @@
           <div class="col-12 col-md-4 offset-md-4">
             <form>
               <div class="mb-3">
-                <label for="celsius" class="form-label">Grados Celsius: <span id="lbl-celsius">0</span></label>
-                <input type="range" class="form-range" min="-200" max="200" id="celsius" oninput="cambiarCelsius();">
+                <label for="celsius" class="form-label">Grados Celsius: <span id="lbl-celsius">0</span>°C</label>
+                <input type="range" class="form-range" min="-200" max="200" step="0.1" id="celsius" oninput="cambiarCelsius();">
                 <div class="form-text">Desliza para cambiar el valor de grados celsius</div>
               </div>
               <div class="mb-3">
-                <label for="celsius" class="form-label">Resultado</label>
-                <div id="resultado">
-                  0 grados celsius son 32 grados fahrenheit
+                <label class="form-label">Resultado</label>
+                <div id="resultado" class="p-2 bg-light rounded">
+                  0°C son 32°F
                 </div>
+                <div id="model-status" class="form-text mt-1"></div>
               </div>
             </form>
           </div>
@@ -58,7 +62,7 @@
         <div class="py-5">
           <h1 class="display-5 fw-bold text-white">I.E.D. VILLA ELISA INTELIGENCIA ARTIFICIAL</h1>
           <div class="col-lg-6 mx-auto">
-            <p class="fs-5 mb-4">Revisa <a href="https://youtube.com/RingaTech">mi canal</a> para videos de inteligencia artificial, programaci&oacute;n, etc.</p>
+            <p class="fs-5 mb-4">Revisa <a href="https://youtube.com/RingaTech" class="text-white">mi canal</a> para videos de inteligencia artificial, programación, etc.</p>
           </div>
         </div>
       </div>
@@ -68,31 +72,94 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.0.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-MrcW6ZMFYlzcLA8Nl+NtUVF0sA7MsXsP1UyJoMp4YLEuNSfAP+JcXn/tWtIaxVXM" crossorigin="anonymous"></script>
 
-    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@2.0.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@3.18.0/dist/tf.min.js"></script>
 
     <script type="text/javascript">
+      // Variables globales
+      let modelo = null;
+      let modeloCargado = false;
+      const statusElement = document.getElementById('model-status');
 
-      var modelo = null;
-
-      //Cargar modelo
-      (async () => {
-          console.log("Cargando modelo...");
-          modelo = await tf.loadLayersModel("model.json");
-          console.log("Modelo cargado...");
-      })();
-
-      function cambiarCelsius() {
-        var celsius = document.getElementById("celsius").value;
-        document.getElementById("lbl-celsius").innerHTML=celsius;
-        if (modelo != null) {
-          var tensor = tf.tensor1d([parseInt(celsius)]);
-          var prediccion = modelo.predict(tensor).dataSync();
-          prediccion = Math.round(prediccion, 1);
-          document.getElementById("resultado").innerHTML =celsius+ " celsius son " + prediccion + " fahrenheit!";
-        } else {
-          document.getElementById("resultado").innerHTML = "Intenta de nuevo en un momento...";
+      // Función para cargar el modelo con manejo de errores
+      async function cargarModelo() {
+        try {
+          statusElement.textContent = "Cargando modelo...";
+          statusElement.className = "form-text text-warning";
+          
+          // Cargar modelo
+          modelo = await tf.loadGraphModel("model.json");
+          
+          // Verificar la forma de entrada del modelo
+          if (!modelo.inputs[0].shape) {
+            throw new Error("El modelo no tiene definida una forma de entrada válida");
+          }
+          
+          console.log("Modelo cargado correctamente. Input shape:", modelo.inputs[0].shape);
+          statusElement.textContent = "Modelo cargado correctamente";
+          statusElement.className = "form-text text-success";
+          modeloCargado = true;
+          
+          // Habilitar el slider
+          document.getElementById("celsius").disabled = false;
+        } catch (error) {
+          console.error("Error al cargar el modelo:", error);
+          statusElement.textContent = `Error al cargar el modelo: ${error.message}. Usando fórmula tradicional.`;
+          statusElement.className = "form-text text-danger";
+          modeloCargado = false;
         }
       }
+
+      // Función para convertir Celsius a Fahrenheit
+      function celsiusToFahrenheit(celsius) {
+        return (celsius * 9/5) + 32;
+      }
+
+      // Función principal de conversión
+      function cambiarCelsius() {
+        const celsius = parseFloat(document.getElementById("celsius").value);
+        document.getElementById("lbl-celsius").textContent = celsius.toFixed(1);
+        
+        let fahrenheit;
+        let mensaje;
+        
+        if (modeloCargado && modelo) {
+          try {
+            // Crear tensor de entrada
+            const inputTensor = tf.tensor2d([[celsius]], [1, 1]);
+            
+            // Hacer predicción
+            const outputTensor = modelo.predict(inputTensor);
+            fahrenheit = outputTensor.dataSync()[0];
+            
+            // Liberar memoria
+            inputTensor.dispose();
+            outputTensor.dispose();
+            
+            mensaje = `${celsius.toFixed(1)}°C son ${fahrenheit.toFixed(1)}°F (con modelo)`;
+          } catch (error) {
+            console.error("Error en predicción:", error);
+            fahrenheit = celsiusToFahrenheit(celsius);
+            mensaje = `${celsius.toFixed(1)}°C son ${fahrenheit.toFixed(1)}°F (fórmula)`;
+          }
+        } else {
+          fahrenheit = celsiusToFahrenheit(celsius);
+          mensaje = `${celsius.toFixed(1)}°C son ${fahrenheit.toFixed(1)}°F (fórmula)`;
+        }
+        
+        document.getElementById("resultado").innerHTML = mensaje;
+      }
+
+      // Inicialización
+      document.addEventListener('DOMContentLoaded', () => {
+        // Deshabilitar slider hasta que el modelo esté listo
+        document.getElementById("celsius").disabled = true;
+        
+        // Cargar modelo
+        cargarModelo();
+        
+        // Inicializar valores
+        cambiarCelsius();
+      });
     </script>
   </body>
 </html>
